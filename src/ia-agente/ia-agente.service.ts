@@ -232,18 +232,31 @@ Fusioná el dato nuevo con lo que ya tenía y devolvé el JSON actualizado(si to
   }
 
   // ---------- Etapa 2 ----------
-  private resolverRutaPorTexto(destino: string): { clave: string; config: RutaConfig } | null {
+  private resolverRutaPorTexto(destino: string, rolLower?: string): { clave: string; config: RutaConfig } | null {
     const palabrasTexto = destino.toLowerCase().trim().split(/\s+/);
 
-    let mejorMatch: { clave: string; config: RutaConfig; palabrasAlias: number } | null = null;
+    let mejorMatch: { clave: string; config: RutaConfig; palabrasAlias: number; delRol: boolean } | null = null;
 
     for (const [clave, config] of Object.entries(CATALOGO_RUTAS)) {
+      const delRol = !!rolLower && config.rolesPermitidos.includes(rolLower);
+
       for (const alias of config.alias) {
         const palabrasAlias = alias.split(/\s+/);
-        const todasPresentes = palabrasAlias.every(palabra => palabrasTexto.includes(palabra));
+        // Match por substring en vez de igualdad estricta: "dash" matchea "dashboard"
+        const todasPresentes = palabrasAlias.every(palabraAlias =>
+          palabrasTexto.some(palabraTexto => palabraTexto.includes(palabraAlias) || palabraAlias.includes(palabraTexto))
+        );
 
-        if (todasPresentes && (!mejorMatch || palabrasAlias.length > mejorMatch.palabrasAlias)) {
-          mejorMatch = { clave, config, palabrasAlias: palabrasAlias.length };
+        if (!todasPresentes) continue;
+
+        // Prioridad: 1) coincide con el rol del usuario, 2) alias más largo/específico
+        const mejorQueElActual =
+          !mejorMatch ||
+          (delRol && !mejorMatch.delRol) ||
+          (delRol === mejorMatch.delRol && palabrasAlias.length > mejorMatch.palabrasAlias);
+
+        if (mejorQueElActual) {
+          mejorMatch = { clave, config, palabrasAlias: palabrasAlias.length, delRol };
         }
       }
     }
@@ -252,13 +265,13 @@ Fusioná el dato nuevo con lo que ya tenía y devolvé el JSON actualizado(si to
   }
 
   private resolverNavegacion(destino: string, ctxRol: string) {
-    const encontrado = this.resolverRutaPorTexto(destino);
+    const rolLower = ctxRol.toLowerCase();
+    const encontrado = this.resolverRutaPorTexto(destino, rolLower);
 
     if (!encontrado) {
       return { mensaje: `No encontré la pantalla "${destino}". ¿Podés ser más específico?` };
     }
 
-    const rolLower = ctxRol.toLowerCase();
     const tienePermiso = encontrado.config.rolesPermitidos.includes(rolLower);
 
     if (!tienePermiso) {

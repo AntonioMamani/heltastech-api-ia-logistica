@@ -20,7 +20,7 @@ export const CATALOGO_RUTAS: Record<string, RutaConfig> = {
     ruta: '/superadmin/dashboard',
     rolesPermitidos: ['superadmin'],
     descripcion: 'Dashboard de Superadmin',
-    alias: ['dashboard superadmin', 'panel superadmin'],
+    alias: ['dashboard superadmin', 'panel superadmin', 'dashboard', 'panel', 'principal', 'inicio'],
   },
   empresas: {
     ruta: '/superadmin/empresas',
@@ -58,13 +58,13 @@ export const CATALOGO_RUTAS: Record<string, RutaConfig> = {
     ruta: '/admin/dashboard',
     rolesPermitidos: ['admin'],
     descripcion: 'Dashboard de Admin',
-    alias: ['dashboard admin', 'panel admin', 'inicio admin'],
+    alias: ['dashboard admin', 'panel admin', 'inicio admin', 'dashboard', 'panel', 'principal', 'inicio'],
   },
   dashboard_operador: {
     ruta: '/operador/dashboard',
     rolesPermitidos: ['operador_logistica'],
     descripcion: 'Dashboard de Operador Logístico',
-    alias: ['dashboard operador', 'panel operador'],
+    alias: ['dashboard operador', 'panel operador', 'dashboard', 'panel', 'principal', 'inicio'],
   },
   conductores: {
     ruta: '/operador/conductores',
@@ -288,7 +288,7 @@ export const CATALOGO_RUTAS: Record<string, RutaConfig> = {
     ruta: '/asistente-administrativo/dashboard-documentos',
     rolesPermitidos: ['asistente_administrativo'],
     descripcion: 'Dashboard del asistente administrativo',
-    alias: ['dashboard asistente'],
+    alias: ['dashboard asistente', 'dashboard', 'panel', 'principal', 'inicio'],
   },
 
   // ===================== CONDUCTOR =====================
@@ -296,7 +296,7 @@ export const CATALOGO_RUTAS: Record<string, RutaConfig> = {
     ruta: '/conductor/dashboard',
     rolesPermitidos: ['conductor'],
     descripcion: 'Dashboard del conductor',
-    alias: ['dashboard conductor', 'mi panel'],
+    alias: ['dashboard conductor', 'mi panel', 'dashboard', 'panel', 'principal', 'inicio'],
   },
   perfil_conductor: {
     ruta: '/conductor-perfil',
@@ -322,7 +322,7 @@ export const CATALOGO_RUTAS: Record<string, RutaConfig> = {
     ruta: '/cliente/dashboard',
     rolesPermitidos: ['cliente'],
     descripcion: 'Dashboard del cliente',
-    alias: ['dashboard cliente', 'mi panel'],
+    alias: ['dashboard cliente', 'mi panel', 'dashboard', 'panel', 'principal', 'inicio'],
   },
   perfil_cliente: {
     ruta: '/usuario/perfil',
