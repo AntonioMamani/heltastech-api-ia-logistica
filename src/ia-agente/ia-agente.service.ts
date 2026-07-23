@@ -5,6 +5,7 @@ import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { ContextoService } from './contexto.service';
 import { CATALOGO_ENTIDADES } from './dto/catalogo-entidades';
+import { CATALOGO_RUTAS, RutaConfig } from './dto/catalogo-rutas';
 interface ExtraccionLlm {
   status: 'ok' | 'incompleto' | 'no_reconocido';
   tipo: 'accion_entidad' | 'conversacion' | 'fuera_dominio';
@@ -19,22 +20,25 @@ interface ExtraccionLlm {
 }
 
 interface RutaLlm {
-  tipo: 'accion_entidad' | 'conversacion' | 'fuera_dominio';
+  tipo: 'accion_entidad' | 'conversacion' | 'fuera_dominio' | 'navegacion';
   respuesta_directa: string | null;
+  destino?: string;
 }
 
 const ROUTER_SYSTEM_PROMPT = `Eres el clasificador de intención de HeltasTruck, un sistema de logística.
 Devolvé SOLO un JSON, sin texto adicional.
 
 Clasificá el mensaje del usuario en uno de estos tipos:
+- "navegacion": quiere IR, ABRIR o ENTRAR a una pantalla del sistema (ej: "llévame a conductores", "abrí mantenimiento", "quiero ver mis viajes"). NO es una consulta de datos, es solo cambiar de pantalla.
 - "accion_entidad": quiere consultar, crear o actualizar algo del sistema (vehículos, conductores, viajes, pagos, contratos, mantenimiento, clientes, y similares).
 - "conversacion": saludos, agradecimientos, "qué podés hacer", charla trivial, hora/fecha.
 - "fuera_dominio": pide algo sin relación con logística (personas, música, clima, noticias). NUNCA respondas el contenido real aunque insista. Redirigí amablemente.
 
 FORMATO:
-{ "tipo": "accion_entidad" | "conversacion" | "fuera_dominio", "respuesta_directa": "..." }
+{ "tipo": "accion_entidad" | "conversacion" | "fuera_dominio" | "navegacion", "respuesta_directa": "...", "destino": "..." }
 
-Si tipo es "accion_entidad", "respuesta_directa" queda null.`;
+Si tipo es "navegacion", "destino" es la pantalla que el usuario mencionó, con sus propias palabras (ej: "conductores", "mis viajes"), y "respuesta_directa" queda null.
+Si tipo es "accion_entidad", "respuesta_directa" y "destino" quedan null.`;
 
 
 const CAMPOS_NUMERICOS_TEXTO = Object.entries(CATALOGO_ENTIDADES)
@@ -63,7 +67,7 @@ REGLA: El usuario pregunta sobre datos del sistema. Identificá:
 3. FILTROS → si menciona un viaje específico, filtrar por id_viaje
 
 EJEMPLOS:
-- "gastos del viaje 5" → { entidad: "gastos_operativos", accion: "get", data: { filtros: { id_viaje: 5 } } }
+- "gastos del viaje de oruro a chochabamba" → { entidad: "gastos_operativos", accion: "get", data: { filtros: { id_viaje: 5 } } }
 - "que viaje tiene gastos" → { entidad: "gastos_operativos", accion: "get", data: { filtros: {} } }
 - "cuántos gastos tiene el viaje X" → { entidad: "gastos_operativos", accion: "count", data: { filtros: { id_viaje: X } } }
 
@@ -103,7 +107,9 @@ export class IaAgenteService {
         { role: 'system', content: ROUTER_SYSTEM_PROMPT },
         { role: 'user', content: mensaje },
       ]);
-
+      if (ruta.tipo === 'navegacion') {
+        return this.resolverNavegacion(ruta.destino ?? '', ctxRol);
+      }
       if (ruta.tipo !== 'accion_entidad') {
         // Si es conversacion y pregunta por fecha/hora
         if (ruta.tipo === 'conversacion' && /fecha|hora|día|hoy/.test(mensaje.toLowerCase())) {
@@ -216,7 +222,8 @@ Fusioná el dato nuevo con lo que ya tenía y devolvé el JSON actualizado(si to
         content: `Respondé en PRIMERA PERSONA, como si fueras el sistema HeltasTruck, en tono natural. Hablá como si fueras yo, el asistente.
     Identificá los campos con nombres o códigos en lugar de IDs numéricos.
     Si ves "codigo", "nombre", "descripcion", "placa", "numero_contrato", usalos.
-    Si solo ves IDs, decí "el elemento con ID X" pero evitá IDs.`
+    Si solo ves IDs, decí "el elemento con ID X" pero evitá IDs.
+    Todos los resultados que recibís ya están filtrados para excluir inactivos. Si es un conteo o listado, aclará que son "activos" (ej: "Tienes 7 conductores activos").`
       },
       { role: 'user', content: `Pregunta: ${mensaje}\nResultado: ${JSON.stringify(resultado)}` },
     ]);
@@ -225,7 +232,44 @@ Fusioná el dato nuevo con lo que ya tenía y devolvé el JSON actualizado(si to
   }
 
   // ---------- Etapa 2 ----------
+  private resolverRutaPorTexto(destino: string): { clave: string; config: RutaConfig } | null {
+    const palabrasTexto = destino.toLowerCase().trim().split(/\s+/);
 
+    let mejorMatch: { clave: string; config: RutaConfig; palabrasAlias: number } | null = null;
+
+    for (const [clave, config] of Object.entries(CATALOGO_RUTAS)) {
+      for (const alias of config.alias) {
+        const palabrasAlias = alias.split(/\s+/);
+        const todasPresentes = palabrasAlias.every(palabra => palabrasTexto.includes(palabra));
+
+        if (todasPresentes && (!mejorMatch || palabrasAlias.length > mejorMatch.palabrasAlias)) {
+          mejorMatch = { clave, config, palabrasAlias: palabrasAlias.length };
+        }
+      }
+    }
+
+    return mejorMatch ? { clave: mejorMatch.clave, config: mejorMatch.config } : null;
+  }
+
+  private resolverNavegacion(destino: string, ctxRol: string) {
+    const encontrado = this.resolverRutaPorTexto(destino);
+
+    if (!encontrado) {
+      return { mensaje: `No encontré la pantalla "${destino}". ¿Podés ser más específico?` };
+    }
+
+    const rolLower = ctxRol.toLowerCase();
+    const tienePermiso = encontrado.config.rolesPermitidos.includes(rolLower);
+
+    if (!tienePermiso) {
+      return { mensaje: `No tienes permiso para acceder a "${encontrado.config.descripcion}".` };
+    }
+
+    return {
+      mensaje: `Te lleve a ${encontrado.config.descripcion}.`,
+      ruta: encontrado.config.ruta,
+    };
+  }
   private async resolverReferencia(campo: string, textoLibre: string, token: string) {
     const mapaBusqueda: Record<string, { endpoint: string; campoId: string; formato: (i: any) => string }> = {
       conductor: {
