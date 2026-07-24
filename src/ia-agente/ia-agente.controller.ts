@@ -3,7 +3,7 @@ import { decode } from 'jsonwebtoken';
 import { ChatAgenteDto } from './dto/chat-agente.dto';
 import { IaAgenteService } from './ia-agente.service';
 
-@Controller('ia-agente')
+@Controller('ia-agente/api')
 export class IaAgenteController {
   constructor(private readonly iaAgenteService: IaAgenteService) {}
 
