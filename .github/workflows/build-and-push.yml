@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag'
+        description: "Version tag"
         type: string
         required: true
 jobs:
@@ -21,7 +21,6 @@ jobs:
           GROQ_MODEL="${{ vars.GROQ_MODEL }}"
           BACKEND_REAL_URL="${{ vars.BACKEND_REAL_URL }}"
           PORT="${{ vars.PORT }}"
-          HOST_PORT="${{ vars.HOST_PORT }}"
           EOF
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
