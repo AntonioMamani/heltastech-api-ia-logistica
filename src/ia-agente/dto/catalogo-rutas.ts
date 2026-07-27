@@ -1,357 +1,85 @@
-// Catálogo de rutas del sistema para el redireccionamiento por voz/texto del agente IA.
-// Cada clave es un identificador corto que el LLM (o el matching por alias) usa para
-// saber a qué pantalla quiere ir el usuario. "rolesPermitidos" son los roles (en
-// minúscula, igual que vienen del JWT) que tienen esa ruta en su menú.
-//
-// Para agregar una ruta nueva: copiar una entrada, cambiar clave/ruta/roles/alias.
-// No hace falta tocar el resolver de más abajo.
-
 export interface RutaConfig {
-  ruta: string;              // path real de Angular (coincide con app.routes.ts)
-  rolesPermitidos: string[]; // roles que ven esta ruta en su menú (paginas.ts -> filtrarMenuPorRol)
-  descripcion: string;       // texto humano, útil para mensajes de error/ayuda
-  alias: string[];           // palabras clave para matchear el texto libre del usuario
+  ruta: string;
+  rolesPermitidos: string[];
+  descripcion: string;
+  alias: string[];
 }
 
+const r = (ruta: string, roles: string[], desc: string, alias: string[]): RutaConfig => ({ ruta, rolesPermitidos: roles, descripcion: desc, alias });
+
 export const CATALOGO_RUTAS: Record<string, RutaConfig> = {
+  // SUPERADMIN
+  dashboard_superadmin: r('/superadmin/dashboard', ['superadmin'], 'Dashboard de Superadmin', ['dashboard superadmin', 'panel superadmin', 'dashboard', 'panel', 'principal', 'inicio']),
+  empresas: r('/superadmin/empresas', ['superadmin'], 'Listado de empresas', ['empresas', 'listado de empresas']),
+  unidades_gps_empresas: r('/superadmin/unidades-empresas', ['superadmin'], 'Unidades GPS por empresa', ['unidades gps empresas']),
+  planes_empresa: r('/superadmin/plan-empresa', ['superadmin'], 'Planes de empresas', ['planes de empresa']),
+  tipos_cambio: r('/superadmin/tipos-cambio', ['superadmin'], 'Tipos de cambio', ['tipos de cambio', 'tipo de cambio']),
+  feriados: r('/superadmin/feriados', ['superadmin'], 'Feriados', ['feriados']),
 
-  // ===================== SUPERADMIN =====================
-  dashboard_superadmin: {
-    ruta: '/superadmin/dashboard',
-    rolesPermitidos: ['superadmin'],
-    descripcion: 'Dashboard de Superadmin',
-    alias: ['dashboard superadmin', 'panel superadmin', 'dashboard', 'panel', 'principal', 'inicio'],
-  },
-  empresas: {
-    ruta: '/superadmin/empresas',
-    rolesPermitidos: ['superadmin'],
-    descripcion: 'Listado de empresas',
-    alias: ['empresas', 'listado de empresas'],
-  },
-  unidades_gps_empresas: {
-    ruta: '/superadmin/unidades-empresas',
-    rolesPermitidos: ['superadmin'],
-    descripcion: 'Unidades GPS por empresa',
-    alias: ['unidades gps empresas'],
-  },
-  planes_empresa: {
-    ruta: '/superadmin/plan-empresa',
-    rolesPermitidos: ['superadmin'],
-    descripcion: 'Planes de empresas (superadmin)',
-    alias: ['planes de empresa'],
-  },
-  tipos_cambio: {
-    ruta: '/superadmin/tipos-cambio',
-    rolesPermitidos: ['superadmin'],
-    descripcion: 'Tipos de cambio',
-    alias: ['tipos de cambio', 'tipo de cambio'],
-  },
-  feriados: {
-    ruta: '/superadmin/feriados',
-    rolesPermitidos: ['superadmin'],
-    descripcion: 'Feriados',
-    alias: ['feriados'],
-  },
+  // ADMIN
+  dashboard_admin: r('/admin/dashboard', ['admin'], 'Dashboard de Admin', ['dashboard admin', 'panel admin', 'inicio admin', 'dashboard', 'panel', 'principal', 'inicio']),
+  dashboard_operador: r('/operador/dashboard', ['operador_logistica'], 'Dashboard de Operador Logístico', ['dashboard operador', 'panel operador', 'dashboard', 'panel', 'principal', 'inicio']),
+  conductores: r('/operador/conductores', ['admin', 'operador_logistica'], 'Conductores', ['conductores', 'choferes']),
+  vehiculos: r('/operador/unidades-vehiculares', ['admin', 'operador_logistica'], 'Vehículos / Unidades vehiculares', ['vehiculos', 'unidades vehiculares', 'camiones']),
+  viajes: r('/operador/viajes', ['admin', 'operador_logistica'], 'Viajes', ['viajes', 'fletes']),
+  seguimiento_fletes: r('/administrativo/viajes-tablero', ['admin'], 'Seguimiento de fletes', ['seguimiento de fletes', 'tablero de viajes']),
+  nominaciones: r('/administrativo/nominaciones', ['admin'], 'Nominaciones', ['nominaciones']),
+  unidades_arrastre: r('/operador/vehiculos-arrastre', ['admin', 'operador_logistica'], 'Unidades de arrastre', ['unidades de arrastre', 'arrastres']),
+  vehiculos_apoyo: r('/operador/vehiculos-apoyo', ['admin', 'operador_logistica'], 'Vehículos de apoyo', ['vehiculos de apoyo']),
 
-  // ===================== OPERACIONES (admin + operador_logistica) =====================
-  dashboard_admin: {
-    ruta: '/admin/dashboard',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Dashboard de Admin',
-    alias: ['dashboard admin', 'panel admin', 'inicio admin', 'dashboard', 'panel', 'principal', 'inicio'],
-  },
-  dashboard_operador: {
-    ruta: '/operador/dashboard',
-    rolesPermitidos: ['operador_logistica'],
-    descripcion: 'Dashboard de Operador Logístico',
-    alias: ['dashboard operador', 'panel operador', 'dashboard', 'panel', 'principal', 'inicio'],
-  },
-  conductores: {
-    ruta: '/operador/conductores',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Conductores',
-    alias: ['conductores', 'choferes'],
-  },
-  vehiculos: {
-    ruta: '/operador/unidades-vehiculares',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Vehículos / Unidades vehiculares',
-    alias: ['vehiculos', 'unidades vehiculares', 'camiones'],
-  },
-  viajes: {
-    ruta: '/operador/viajes',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Viajes',
-    alias: ['viajes', 'fletes'],
-  },
-  seguimiento_fletes: {
-    ruta: '/administrativo/viajes-tablero',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Seguimiento de fletes (tablero de viajes)',
-    alias: ['seguimiento de fletes', 'tablero de viajes'],
-  },
-  nominaciones: {
-    ruta: '/administrativo/nominaciones',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Nominaciones',
-    alias: ['nominaciones'],
-  },
-  unidades_arrastre: {
-    ruta: '/operador/vehiculos-arrastre',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Unidades de arrastre',
-    alias: ['unidades de arrastre', 'arrastres'],
-  },
-  vehiculos_apoyo: {
-    ruta: '/operador/vehiculos-apoyo',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Vehículos de apoyo',
-    alias: ['vehiculos de apoyo'],
-  },
+  // FINANZAS
+  cuentas_por_cobrar: r('/cuentas-por-cobrar', ['admin'], 'Cuentas por cobrar', ['cuentas por cobrar']),
+  ingresos_egresos: r('/administrativo/ingresos-egresos', ['admin'], 'Ingresos y egresos', ['ingresos y egresos', 'movimientos']),
+  pagos: r('/administrativo/pagos', ['admin'], 'Ingresos / Pagos', ['pagos', 'ingresos']),
+  clientes: r('/operador/registrar', ['admin'], 'Clientes', ['clientes']),
+  contratos: r('/administrativo/contratos', ['admin'], 'Contratos', ['contratos']),
+  cotizaciones: r('/administrativo/cotizaciones', ['admin'], 'Cotizaciones', ['cotizaciones']),
+  planes_empresas_admin: r('/administrativo/planes-empresas', ['admin'], 'Plan de la empresa', ['plan empresa', 'mi plan']),
 
-  // ===================== FINANZAS (admin) =====================
-  cuentas_por_cobrar: {
-    ruta: '/cuentas-por-cobrar',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Cuentas por cobrar',
-    alias: ['cuentas por cobrar'],
-  },
-  ingresos_egresos: {
-    ruta: '/administrativo/ingresos-egresos',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Ingresos y egresos',
-    alias: ['ingresos y egresos', 'movimientos'],
-  },
-  pagos: {
-    ruta: '/administrativo/pagos',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Ingresos / Pagos',
-    alias: ['pagos', 'ingresos'],
-  },
-  clientes: {
-    ruta: '/operador/registrar',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Clientes',
-    alias: ['clientes'],
-  },
-  contratos: {
-    ruta: '/administrativo/contratos',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Contratos',
-    alias: ['contratos'],
-  },
-  cotizaciones: {
-    ruta: '/administrativo/cotizaciones',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Cotizaciones',
-    alias: ['cotizaciones'],
-  },
-  planes_empresas_admin: {
-    ruta: '/administrativo/planes-empresas',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Plan de la empresa',
-    alias: ['plan empresa', 'mi plan'],
-  },
+  // GPS
+  dashboard_gps: r('/administrativo/dashboard-unidades-gps', ['admin'], 'Dashboard de geolocalización', ['dashboard gps', 'geolocalizacion']),
+  monitoreo_unidades: r('/administrativo/monitoreo-unidades', ['admin'], 'Rastreo en tiempo real', ['rastreo tiempo real', 'monitoreo de unidades']),
+  geocercas: r('/administrativo/geocercas', ['admin'], 'Geocercas', ['geocercas']),
+  historial_gps: r('/administrativo/gps/historial', ['admin'], 'Historial y reportes GPS', ['historial gps', 'reportes gps']),
 
-  // ===================== GPS (admin) =====================
-  dashboard_gps: {
-    ruta: '/administrativo/dashboard-unidades-gps',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Dashboard de geolocalización',
-    alias: ['dashboard gps', 'geolocalizacion'],
-  },
-  monitoreo_unidades: {
-    ruta: '/administrativo/monitoreo-unidades',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Rastreo en tiempo real',
-    alias: ['rastreo tiempo real', 'monitoreo de unidades'],
-  },
-  geocercas: {
-    ruta: '/administrativo/geocercas',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Geocercas',
-    alias: ['geocercas'],
-  },
-  historial_gps: {
-    ruta: '/administrativo/gps/historial',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Historial y reportes GPS',
-    alias: ['historial gps', 'reportes gps'],
-  },
+  // DOCUMENTOS
+  dashboard_documentos: r('/administrativo/dashboard-documentos', ['admin', 'asistente_administrativo'], 'Dashboard de documentos', ['dashboard documentos']),
+  documentos_generales: r('/administrativo/generales', ['admin', 'asistente_administrativo'], 'Documentos generales', ['documentos generales', 'documentos']),
 
-  // ===================== DOCUMENTOS (admin + asistente_administrativo) =====================
-  dashboard_documentos: {
-    ruta: '/administrativo/dashboard-documentos',
-    rolesPermitidos: ['admin', 'asistente_administrativo'],
-    descripcion: 'Dashboard de documentos',
-    alias: ['dashboard documentos'],
-  },
-  documentos_generales: {
-    ruta: '/administrativo/generales',
-    rolesPermitidos: ['admin', 'asistente_administrativo'],
-    descripcion: 'Documentos generales',
-    alias: ['documentos generales'],
-  },
+  // MANTENIMIENTO
+  dashboard_mantenimiento: r('/operador/dashboard-mantenimiento', ['admin', 'operador_logistica'], 'Dashboard de mantenimiento', ['dashboard mantenimiento']),
+  mantenimiento: r('/operador/mantenimiento', ['admin', 'operador_logistica'], 'Mantenimiento de vehículos', ['mantenimiento']),
+  mantenimiento_arrastre: r('/operador/mantenimiento-arrastre', ['admin', 'operador_logistica'], 'Mantenimiento de unidades de arrastre', ['mantenimiento arrastre', 'mantenimiento de arrastre', 'mantenimiento de unidades de arrastre']),
+  compra_repuestos: r('/operador/compra-repuestos', ['admin', 'operador_logistica'], 'Compra de repuestos', ['compra de repuestos', 'repuestos']),
+  componentes: r('/operador/componentes', ['admin', 'operador_logistica'], 'Componentes / insumos', ['componentes', 'insumos']),
+  talleres: r('/operador/talleres', ['admin', 'operador_logistica'], 'Talleres', ['talleres']),
+  sistemas: r('/operador/sistemas', ['admin', 'operador_logistica'], 'Sistemas de mantenimiento', ['sistemas']),
 
-  // ===================== MANTENIMIENTO (admin + operador_logistica) =====================
-  dashboard_mantenimiento: {
-    ruta: '/operador/dashboard-mantenimiento',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Dashboard de mantenimiento',
-    alias: ['dashboard mantenimiento'],
-  },
-  mantenimiento: {
-    ruta: '/operador/mantenimiento',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Mantenimiento de vehículos',
-    alias: ['mantenimiento'],
-  },
-  mantenimiento_arrastre: {
-    ruta: '/operador/mantenimiento-arrastre',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Mantenimiento de unidades de arrastre',
-    alias: ['mantenimiento arrastre', 'mantenimiento de arrastre'],
-  },
-  compra_repuestos: {
-    ruta: '/operador/compra-repuestos',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Compra de repuestos',
-    alias: ['compra de repuestos', 'repuestos'],
-  },
-  componentes: {
-    ruta: '/operador/componentes',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Componentes / insumos',
-    alias: ['componentes', 'insumos'],
-  },
-  talleres: {
-    ruta: '/operador/talleres',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Talleres',
-    alias: ['talleres'],
-  },
-  sistemas: {
-    ruta: '/operador/sistemas',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Sistemas de mantenimiento',
-    alias: ['sistemas'],
-  },
+  // USUARIOS
+  gestionar_usuarios: r('/administrativo/registrar', ['admin'], 'Gestionar usuarios', ['gestionar usuarios', 'usuarios']),
+  configuraciones: r('/administrativo/configuraciones', ['admin'], 'Datos generales / configuraciones', ['configuraciones', 'datos generales']),
+  parametricas: r('/administrativo/parametrica', ['admin'], 'Tablas paramétricas', ['parametricas', 'tablas parametricas']),
+  ubicaciones: r('/operador/rutas', ['admin'], 'Ubicaciones', ['ubicaciones', 'rutas']),
+  formato_impresion: r('/administrativo/formato-impresion', ['admin'], 'Formato de impresión de correlativos', ['formato de impresion', 'correlativos']),
 
-  // ===================== USUARIOS Y CONFIGURACIÓN (admin) =====================
-  gestionar_usuarios: {
-    ruta: '/administrativo/registrar',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Gestionar usuarios',
-    alias: ['gestionar usuarios', 'usuarios'],
-  },
-  configuraciones: {
-    ruta: '/administrativo/configuraciones',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Datos generales / configuraciones',
-    alias: ['configuraciones', 'datos generales'],
-  },
-  parametricas: {
-    ruta: '/administrativo/parametrica',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Tablas paramétricas',
-    alias: ['parametricas', 'tablas parametricas'],
-  },
-  ubicaciones: {
-    ruta: '/operador/rutas',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Ubicaciones',
-    alias: ['ubicaciones', 'rutas'],
-  },
-  formato_impresion: {
-    ruta: '/administrativo/formato-impresion',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Formato de impresión de correlativos',
-    alias: ['formato de impresion', 'correlativos'],
-  },
+  // REPORTES
+  reporte_mantenimiento: r('/operador/reportes-mantenimiento', ['admin', 'operador_logistica'], 'Reporte de mantenimiento', ['reporte de mantenimiento', 'reportes de mantenimiento']),
+  reporte_viajes: r('/reporte-viaje', ['admin'], 'Reporte de viajes', ['reporte de viajes', 'reportes de viajes']),
 
-  // ===================== REPORTES =====================
-  reporte_mantenimiento: {
-    ruta: '/operador/reportes-mantenimiento',
-    rolesPermitidos: ['admin', 'operador_logistica'],
-    descripcion: 'Reporte de mantenimiento',
-    alias: ['reporte de mantenimiento', 'reportes de mantenimiento'],
-  },
-  reporte_viajes: {
-    ruta: '/reporte-viaje',
-    rolesPermitidos: ['admin'],
-    descripcion: 'Reporte de viajes',
-    alias: ['reporte de viajes', 'reportes de viajes'],
-  },
+  // ASISTENTE
+  dashboard_asistente: r('/asistente-administrativo/dashboard-documentos', ['asistente_administrativo'], 'Dashboard del asistente', ['dashboard asistente', 'dashboard', 'panel', 'principal', 'inicio']),
 
-  // ===================== ASISTENTE ADMINISTRATIVO =====================
-  dashboard_asistente: {
-    ruta: '/asistente-administrativo/dashboard-documentos',
-    rolesPermitidos: ['asistente_administrativo'],
-    descripcion: 'Dashboard del asistente administrativo',
-    alias: ['dashboard asistente', 'dashboard', 'panel', 'principal', 'inicio'],
-  },
+  // CONDUCTOR
+  dashboard_conductor: r('/conductor/dashboard', ['conductor'], 'Dashboard del conductor', ['dashboard conductor', 'mi panel', 'dashboard', 'panel', 'principal', 'inicio']),
+  perfil_conductor: r('/conductor-perfil', ['conductor'], 'Perfil del conductor', ['mi perfil']),
+  mis_viajes_conductor: r('/viajes/mis-viajes', ['conductor'], 'Mis viajes', ['mis viajes']),
+  incidencias: r('/incidencias/registro-incidencias', ['conductor'], 'Registro de incidencias', ['incidencias', 'registrar incidencia']),
 
-  // ===================== CONDUCTOR =====================
-  dashboard_conductor: {
-    ruta: '/conductor/dashboard',
-    rolesPermitidos: ['conductor'],
-    descripcion: 'Dashboard del conductor',
-    alias: ['dashboard conductor', 'mi panel', 'dashboard', 'panel', 'principal', 'inicio'],
-  },
-  perfil_conductor: {
-    ruta: '/conductor-perfil',
-    rolesPermitidos: ['conductor'],
-    descripcion: 'Perfil del conductor',
-    alias: ['mi perfil'],
-  },
-  mis_viajes_conductor: {
-    ruta: '/viajes/mis-viajes',
-    rolesPermitidos: ['conductor'],
-    descripcion: 'Mis viajes (conductor)',
-    alias: ['mis viajes'],
-  },
-  incidencias: {
-    ruta: '/incidencias/registro-incidencias',
-    rolesPermitidos: ['conductor'],
-    descripcion: 'Registro de incidencias',
-    alias: ['incidencias', 'registrar incidencia'],
-  },
-
-  // ===================== CLIENTE =====================
-  dashboard_cliente: {
-    ruta: '/cliente/dashboard',
-    rolesPermitidos: ['cliente'],
-    descripcion: 'Dashboard del cliente',
-    alias: ['dashboard cliente', 'mi panel', 'dashboard', 'panel', 'principal', 'inicio'],
-  },
-  perfil_cliente: {
-    ruta: '/usuario/perfil',
-    rolesPermitidos: ['cliente'],
-    descripcion: 'Perfil personal',
-    alias: ['mi perfil'],
-  },
-  cotizar_viaje: {
-    ruta: '/usuario/cotizacion',
-    rolesPermitidos: ['cliente'],
-    descripcion: 'Cotizar viaje',
-    alias: ['cotizar viaje', 'cotizacion'],
-  },
-  mis_viajes_cliente: {
-    ruta: '/usuario/viajes',
-    rolesPermitidos: ['cliente'],
-    descripcion: 'Mis viajes (cliente)',
-    alias: ['mis viajes'],
-  },
-  contratos_cliente: {
-    ruta: '/usuario/contratos',
-    rolesPermitidos: ['cliente'],
-    descripcion: 'Contratos (cliente)',
-    alias: ['mis contratos'],
-  },
-  historial_pagos_cliente: {
-    ruta: '/usuario/pagos',
-    rolesPermitidos: ['cliente'],
-    descripcion: 'Historial de pagos (cliente)',
-    alias: ['historial de pagos', 'mis pagos'],
-  },
+  // CLIENTE
+  dashboard_cliente: r('/cliente/dashboard', ['cliente'], 'Dashboard del cliente', ['dashboard cliente', 'mi panel', 'dashboard', 'panel', 'principal', 'inicio']),
+  perfil_cliente: r('/usuario/perfil', ['cliente'], 'Perfil personal', ['mi perfil']),
+  cotizar_viaje: r('/usuario/cotizacion', ['cliente'], 'Cotizar viaje', ['cotizar viaje', 'cotizacion']),
+  mis_viajes_cliente: r('/usuario/viajes', ['cliente'], 'Mis viajes', ['mis viajes']),
+  contratos_cliente: r('/usuario/contratos', ['cliente'], 'Contratos', ['mis contratos']),
+  historial_pagos_cliente: r('/usuario/pagos', ['cliente'], 'Historial de pagos', ['historial de pagos', 'mis pagos']),
 };

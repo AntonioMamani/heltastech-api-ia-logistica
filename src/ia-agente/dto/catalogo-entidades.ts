@@ -1,52 +1,69 @@
-export interface EntidadConfig {
-  endpoint: string;
-  idField: string;
-  scoped: boolean; // true = filtra por id_empresa
-  referencias: string[]; // campos de texto libre a resolver por nombre (ver mapaBusqueda en el service)
-  camposNumericos?: string[]; // campos válidos para sum/avg (debe reflejar TABLAS_PERMITIDAS del backend)
+export class EntidadConfig {
+  constructor(
+    public readonly endpoint: string,
+    public readonly idField: string,
+    public readonly scoped: boolean,
+    public readonly referencias: string[] = [],
+    public readonly camposNumericos: string[] = [],
+    public readonly campoEstado: string | null = null,
+    public readonly estadosValidos: string[] = [],
+  ) {}
+
+  tieneCampoNumerico(campo: string): boolean {
+    return this.camposNumericos.includes(campo);
+  }
+
+  esEstadoValido(estado: string): boolean {
+    return this.estadosValidos.length === 0 || this.estadosValidos.includes(estado);
+  }
+
+  requiereResolucion(campo: string): boolean {
+    return this.referencias.includes(campo);
+  }
 }
 
 export const CATALOGO_ENTIDADES: Record<string, EntidadConfig> = {
-  // ____ scoped por empresa ____
-  clientes: { endpoint: 'clientes', idField: 'id_cliente', scoped: true, referencias: [] },
-  conductores: { endpoint: 'conductores', idField: 'id_conductor', scoped: true, referencias: [] },
-  vehiculos: { endpoint: 'vehiculos', idField: 'id_unidad', scoped: true, referencias: [] },
-  vehiculos_apoyo: { endpoint: 'vehiculos_apoyo', idField: 'id_vehiculo_apoyo', scoped: true, referencias: [] },
-  unidades_arrastre: { endpoint: 'unidades_arrastre', idField: 'id_unidad_arrastre', scoped: true, referencias: [] },
-  viajes: { endpoint: 'viajes', idField: 'id_viaje', scoped: true, referencias: ['cliente', 'conductor'], camposNumericos: ['distancia'] },
-  contratos: { endpoint: 'contratos', idField: 'id_contrato', scoped: true, referencias: ['cliente'], camposNumericos: ['costo_total'] },
-  cotizaciones: { endpoint: 'cotizaciones', idField: 'id_cotizacion', scoped: true, referencias: ['cliente'], camposNumericos: ['costo_total'] },
-  pagos: { endpoint: 'pagos', idField: 'id_pago', scoped: true, referencias: [], camposNumericos: ['monto_pagado'] },
-  mantenimiento: { endpoint: 'mantenimiento', idField: 'id_mantenimiento', scoped: true, referencias: [], camposNumericos: ['costo_total'] },
-  mantenimiento_arrastre: { endpoint: 'mantenimiento_arrastre', idField: 'id_mantenimiento_arrastre', scoped: true, referencias: [] },
-  cuentas_por_cobrar: { endpoint: 'cuentas_por_cobrar', idField: 'id_cuenta', scoped: true, referencias: [] },
-  sistemas_vehiculo: { endpoint: 'sistemas_vehiculo', idField: 'id_sistema', scoped: true, referencias: [] },
-  componentes_vehiculo_insumos: { endpoint: 'componentes_vehiculo_insumos', idField: 'id_componente', scoped: true, referencias: [] },
-  talleres: { endpoint: 'talleres', idField: 'id_taller', scoped: true, referencias: [] },
-  movimientos: { endpoint: 'movimientos', idField: 'id_movimiento', scoped: true, referencias: [] },
-  asignacion_viaticos: { endpoint: 'asignacion_viaticos', idField: 'id_asignacion', scoped: true, referencias: [] },
-  correlativo_documentos: { endpoint: 'correlativo_documentos', idField: 'id', scoped: true, referencias: [] },
-  formato_impresion_correlativo: { endpoint: 'formato_impresion_correlativo', idField: 'id_formato', scoped: true, referencias: [] },
-  planes_empresas: { endpoint: 'planes_empresas', idField: 'id_plan_empresa', scoped: true, referencias: [] },
-  usuario: { endpoint: 'usuario', idField: 'id', scoped: true, referencias: [] },
-  documentos_generales: { endpoint: 'documentos_generales', idField: 'id_documento_general', scoped: true, referencias: [] },
-  // ____ generales (no scoped por empresa) ____
-  ubicaciones: { endpoint: 'ubicaciones', idField: 'id_ubicacion', scoped: false, referencias: [] },
-  tablas_parametricas: { endpoint: 'tablas_parametricas', idField: 'id_tabla_parametrica', scoped: false, referencias: [] },
-  claves_valores: { endpoint: 'claves_valores', idField: 'id', scoped: false, referencias: [] },
-  feriados: { endpoint: 'feriados', idField: 'id_feriado', scoped: false, referencias: [] },
-  tipos_cambio: { endpoint: 'tipos_cambio', idField: 'id_tipo_cambio', scoped: false, referencias: [] },
-  tipo_cambio_referencial: { endpoint: 'tipo_cambio_referencial', idField: 'id_tipo_cambio_ref', scoped: false, referencias: [] },
-  planes_subscripciones: { endpoint: 'planes_subscripciones', idField: 'id_plan', scoped: false, referencias: [] },
-  cargas: { endpoint: 'cargas', idField: 'id_carga', scoped: false, referencias: ['viaje'] },
-  cargas_detalles: { endpoint: 'cargas_detalles', idField: 'id_detalle', scoped: false, referencias: [] },
-  incidencias: { endpoint: 'incidencias', idField: 'id_incidencia', scoped: false, referencias: ['conductor', 'viaje'], camposNumericos: ['costo_estimado'] },
-  estados_unidades: { endpoint: 'estados_unidades', idField: 'id_estados_unidad', scoped: false, referencias: [] },
-  detalle_gasto_viaje: { endpoint: 'detalle_gasto_viaje', idField: 'id_detalle', scoped: false, referencias: ['viaje'], camposNumericos: ['monto', 'litros_gastados'] },
-  rutas: { endpoint: 'rutas', idField: 'id_ruta', scoped: false, referencias: ['viaje'] },
-  componentes_mantenimiento: { endpoint: 'componentes_mantenimiento', idField: 'id', scoped: false, referencias: [] },
-  componentes_mantenimiento_arrastre: { endpoint: 'componentes_mantenimiento_arrastre', idField: 'id', scoped: false, referencias: [] },
-  notificaciones: { endpoint: 'notificaciones', idField: 'id_notificacion', scoped: false, referencias: [] },
-  salarios_conductores: { endpoint: 'salarios_conductores', idField: 'id_salario', scoped: false, referencias: ['conductor'] },
-  catalogos_precios: { endpoint: 'catalogos_precios', idField: 'id_catalogo', scoped: false, referencias: [] },
+  // con id_empresa
+  clientes: new EntidadConfig('clientes', 'id_cliente', true),
+  conductores: new EntidadConfig('conductores', 'id_conductor', true),
+  vehiculos: new EntidadConfig('vehiculos', 'id_unidad', true),
+  vehiculos_apoyo: new EntidadConfig('vehiculos_apoyo', 'id_vehiculo_apoyo', true),
+  unidades_arrastre: new EntidadConfig('unidades_arrastre', 'id_unidad_arrastre', true),
+  viajes: new EntidadConfig('viajes', 'id_viaje', true, ['cliente', 'conductor'], ['distancia'], 'estado_viaje', ['PROGRAMADO', 'ASIGNADO', 'RUTA_PROGRAMADA', 'FINALIZADO', 'CANCELADO']),
+  contratos: new EntidadConfig('contratos', 'id_contrato', true, ['cliente'], ['costo_total']),
+  cotizaciones: new EntidadConfig('cotizaciones', 'id_cotizacion', true, ['cliente'], ['costo_total'], 'estado_cotizacion', ['PENDIENTE', 'COTIZADA', 'ACEPTADA', 'RECHAZADA']),
+  pagos: new EntidadConfig('pagos', 'id_pago', true, [], ['monto_pagado'], 'estado_pago', ['PENDIENTE', 'PARCIAL', 'COMPLETADO']),
+  mantenimiento: new EntidadConfig('mantenimiento', 'id_mantenimiento', true, [], ['costo_total'], 'estado_ot', ['PENDIENTE', 'EN_PROCESO', 'CERRADA', 'CANCELADA']),
+  mantenimiento_arrastre: new EntidadConfig('mantenimiento_arrastre', 'id_mantenimiento_arrastre', true, [], [], 'estado_ot', ['PENDIENTE', 'EN_PROCESO', 'CERRADA', 'CANCELADA']),
+  cuentas_por_cobrar: new EntidadConfig('cuentas_por_cobrar', 'id_cuenta', true),
+  sistemas_vehiculo: new EntidadConfig('sistemas_vehiculo', 'id_sistema', true),
+  componentes_vehiculo_insumos: new EntidadConfig('componentes_vehiculo_insumos', 'id_componente', true),
+  movimientos: new EntidadConfig('movimientos', 'id_movimiento', true),
+  asignacion_viaticos: new EntidadConfig('asignacion_viaticos', 'id_asignacion', true),
+  correlativo_documentos: new EntidadConfig('correlativo_documentos', 'id', true),
+  formato_impresion_correlativo: new EntidadConfig('formato_impresion_correlativo', 'id_formato', true),
+  planes_empresas: new EntidadConfig('planes_empresas', 'id_plan_empresa', true),
+  usuario: new EntidadConfig('usuario', 'id', true),
+  documentos_generales: new EntidadConfig('documentos_generales', 'id_documento_general', true),
+  talleres: new EntidadConfig('talleres', 'id_taller', true),
+
+  // sin id_empresa
+  ubicaciones: new EntidadConfig('ubicaciones', 'id_ubicacion', false),
+  tablas_parametricas: new EntidadConfig('tablas_parametricas', 'id_tabla_parametrica', false),
+  claves_valores: new EntidadConfig('claves_valores', 'id', false),
+  feriados: new EntidadConfig('feriados', 'id_feriado', false),
+  tipos_cambio: new EntidadConfig('tipos_cambio', 'id_tipo_cambio', false),
+  tipo_cambio_referencial: new EntidadConfig('tipo_cambio_referencial', 'id_tipo_cambio_ref', false),
+  planes_subscripciones: new EntidadConfig('planes_subscripciones', 'id_plan', false),
+  cargas: new EntidadConfig('cargas', 'id_carga', false, ['viaje']),
+  cargas_detalles: new EntidadConfig('cargas_detalles', 'id_detalle', false),
+  incidencias: new EntidadConfig('incidencias', 'id_incidencia', false, ['conductor', 'viaje'], ['costo_estimado'], 'estado_incidencia', ['Reportada', 'En revisión', 'En reparación', 'Resuelta', 'Cancelada']),
+  estados_unidades: new EntidadConfig('estados_unidades', 'id_estados_unidad', false),
+  detalle_gasto_viaje: new EntidadConfig('detalle_gasto_viaje', 'id_detalle', false, ['viaje'], ['monto', 'litros_gastados']),
+  rutas: new EntidadConfig('rutas', 'id_ruta', false, ['viaje'], [], 'estado', ['PENDIENTE', 'EN_RUTA', 'FINALIZADO', 'CANCELADO']),
+  componentes_mantenimiento: new EntidadConfig('componentes_mantenimiento', 'id', false),
+  componentes_mantenimiento_arrastre: new EntidadConfig('componentes_mantenimiento_arrastre', 'id', false),
+  notificaciones: new EntidadConfig('notificaciones', 'id_notificacion', false),
+  salarios_conductores: new EntidadConfig('salarios_conductores', 'id_salario', false, ['conductor']),
+  catalogos_precios: new EntidadConfig('catalogos_precios', 'id_catalogo', false),
 };
