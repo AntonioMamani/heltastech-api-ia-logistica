@@ -363,7 +363,7 @@ export class IaAgenteService {
         const nombres = encontrados.slice(0, 5).map(i => this.formatearItemGenerico(i));
         return { resuelto: false, mensajeUsuario: `Encontre varios: ${nombres.join(', ')}. ¿Cual es?` };
       }
-      return { resuelto: true, valores: { [entidadConfig.idField]: encontrados[0][entidadConfig.idField] } };
+      return { resuelto: true, valores: { [`id_${campo}`]: encontrados[0][entidadConfig.idField] } };
     } catch (err) {
       this.logger.error(`Error resolviendo referencia "${campo}"`, err);
       return { resuelto: false, mensajeUsuario: `Tuve un problema buscando "${textoLibre}", intenta de nuevo.` };
