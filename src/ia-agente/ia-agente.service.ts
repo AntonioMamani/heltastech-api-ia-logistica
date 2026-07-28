@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ContextoService } from './contexto.service';
 import { CATALOGO_ENTIDADES } from './dto/catalogo-entidades';
 import { CATALOGO_RUTAS, RutaConfig } from './dto/catalogo-rutas';
+import { CONSULTAR_DATOS_TOOL } from './dto/tool-consultar-datos';
 import { ExtraccionLlm, RutaLlm } from './interfaces/llm.interface';
 import { EXTRACTOR_SYSTEM_PROMPT, ROUTER_SYSTEM_PROMPT } from './prompts/prompts.constant';
 
@@ -13,6 +14,7 @@ import { EXTRACTOR_SYSTEM_PROMPT, ROUTER_SYSTEM_PROMPT } from './prompts/prompts
 export class IaAgenteService {
   private readonly logger = new Logger(IaAgenteService.name);
   private ultimaVista: Map<string, string> = new Map();
+  private ultimoResultado: Map<string, { entidad: string; ids: number[] }> = new Map();
   private readonly NORMALIZACION_ENTIDADES: Record<string, string> = {
     'gastos_operativos': 'detalle_gasto_viaje',
     'gastos': 'detalle_gasto_viaje',
@@ -28,11 +30,28 @@ export class IaAgenteService {
     'vehiculos_apoyo': 'vehiculos_apoyo',
   };
 
+  private readonly TIPOS_FILTRO = [
+    'texto_busqueda',
+    'fecha_desde',
+    'fecha_hasta',
+    'monto_min',
+    'monto_max',
+    'estado',
+    'tipo',
+    'moneda',
+    'esta_activo',
+    'entidad_propietaria'
+  ];
+  private readonly ACCIONES_PERMITIDAS = [
+    'get',
+    'count',
+    'sum',
+    'avg',
+  ];
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
     private readonly contexto: ContextoService,
-
   ) { }
 
   async procesarMensaje(mensaje: string, token: string, ctxRol: string, userId: string) {
@@ -43,25 +62,20 @@ export class IaAgenteService {
   }
 
   private async procesarMensajeInterno(mensaje: string, token: string, ctxRol: string, userId: string) {
-    if (/crea|actualiz|modific|edit|registr/i.test(mensaje)) {
+    if (/\b(crea|creame|creá|actualiz|modific|edita|editar|registra|registrar)\b/i.test(mensaje)) {
       return { mensaje: 'Aun no puedo crear ni actualizar informacion registrada, gracias.' };
     }
+
     const pendiente = this.contexto.get(userId);
     const historial = this.contexto.getHistorial(userId);
 
     if (!pendiente) {
       const vistaKey = this.ultimaVista.get(userId);
       const vistaDesc = vistaKey ? CATALOGO_RUTAS[vistaKey]?.descripcion : null;
-      const vistaContexto = vistaDesc ? `El usuario esta actualmente en la vista: "${vistaDesc}". Si el usuario pregunta sobre la vista actual o "donde esta", responde con esa informacion.` : '';
+      const vistaContexto = vistaDesc ? `El usuario esta actualmente en la vista: "${vistaDesc}".` : '';
 
-      const messages = [
-        { role: 'system', content: ROUTER_SYSTEM_PROMPT },
-      ];
-
-      if (vistaContexto) {
-        messages.push({ role: 'system', content: vistaContexto });
-      }
-
+      const messages = [{ role: 'system', content: ROUTER_SYSTEM_PROMPT }];
+      if (vistaContexto) messages.push({ role: 'system', content: vistaContexto });
       messages.push(...historial);
 
       const ruta = await this.llamarLlmRuta(messages);
@@ -96,32 +110,31 @@ export class IaAgenteService {
         const vistaKey = this.ultimaVista.get(userId);
         const vistaDesc = vistaKey ? CATALOGO_RUTAS[vistaKey]?.descripcion : null;
         const vistaContexto = vistaDesc ? `El usuario esta actualmente en la vista: "${vistaDesc}".` : '';
+        const ultimo = this.ultimoResultado.get(userId);
+        const ultimoContexto = ultimo ? `El ultimo resultado mostrado fue de "${ultimo.entidad}" con ID(s): ${ultimo.ids.join(', ')}. Si el usuario dice "ese", "esta", "el anterior", usa id_directo con ese ID.` : '';
 
-        const messagesExtractor = [
-          { role: 'system', content: EXTRACTOR_SYSTEM_PROMPT },
-        ];
-
-        if (vistaContexto) {
-          messagesExtractor.push({ role: 'system', content: vistaContexto });
-        }
-
+        const messagesExtractor = [{ role: 'system', content: EXTRACTOR_SYSTEM_PROMPT }];
+        if (vistaContexto) messagesExtractor.push({ role: 'system', content: vistaContexto });
+        if (ultimoContexto) messagesExtractor.push({ role: 'system', content: ultimoContexto });
         messagesExtractor.push(...historial);
 
         extraccion = await this.llamarLlmJson(messagesExtractor);
       }
-    } catch (err) {
-      this.logger.error('Error en extraccion', err);
-      return { mensaje: 'No pude procesar tu solicitud, intenta reformularla.' };
+    } catch (err: any) {
+      this.logger.error('Error en extraccion: ' + err.message);
+      return { mensaje: err.message || 'No pude procesar tu solicitud, intenta reformularla.' };
     }
+
+    console.log('Extraccion LLM:', extraccion);
 
     if (extraccion.status === 'no_reconocido') {
       this.contexto.clear(userId);
       return { mensaje: 'No entendi la solicitud, ¿podes reformularla?' };
     }
 
-    if (extraccion.accion === 'create' || extraccion.accion === 'update') {
+    if (extraccion.accion === 'create' || extraccion.accion === 'update' || extraccion.accion === 'delete') {
       this.contexto.clear(userId);
-      return { mensaje: 'Aun no puedo crear o actualizar informacion registrada, gracias.' };
+      return { mensaje: 'Aun no puedo crear, actualizar ni eliminar informacion registrada, gracias.' };
     }
 
     if (extraccion.status === 'incompleto') {
@@ -136,7 +149,6 @@ export class IaAgenteService {
 
     this.contexto.clear(userId);
 
-    // Normalizacion centralizada
     if (this.NORMALIZACION_ENTIDADES[extraccion.entidad]) {
       extraccion.entidad = this.NORMALIZACION_ENTIDADES[extraccion.entidad];
     }
@@ -145,9 +157,27 @@ export class IaAgenteService {
     if (!entidadConfig) {
       return { mensaje: `Todavia no puedo gestionar "${extraccion.entidad}".` };
     }
-
+    if (extraccion.referencias_texto) {
+      const referenciasInvalidas = Object.keys(extraccion.referencias_texto).filter(
+        ref => !entidadConfig.referencias.includes(ref)
+      );
+      if (referenciasInvalidas.length > 0) {
+        return {
+          mensaje: `No se puede filtrar por "${referenciasInvalidas.join(', ')}" en "${extraccion.entidad}". Esta entidad no tiene relacion.`
+        };
+      }
+    }
     if (extraccion.tipo === 'conversacion' || extraccion.tipo === 'fuera_dominio') {
       return { mensaje: extraccion.respuesta_directa ?? 'Hola. ¿En que te puedo ayudar hoy?' };
+    }
+
+    if (extraccion.data?.estado && entidadConfig.estadosValidos.length > 0) {
+      const estadoNormalizado = this.normalizarTexto(extraccion.data.estado);
+      const match = entidadConfig.estadosValidos.find(e => this.palabraSimilar(this.normalizarTexto(e), estadoNormalizado));
+      if (!match) {
+        return { mensaje: `Estado "${extraccion.data.estado}" no valido para "${extraccion.entidad}". Estados validos: ${entidadConfig.estadosValidos.join(', ')}.` };
+      }
+      extraccion.data.estado = match;
     }
 
     const idsResueltos: Record<string, any> = {};
@@ -164,16 +194,19 @@ export class IaAgenteService {
 
     let resultado: any;
     try {
+      const payload = this.construirPayload(extraccion.data, idsResueltos, extraccion.campo, entidadConfig.campoFecha);
+      console.log('Payload a backend:', JSON.stringify(payload));
       resultado = await this.ejecutarAccion(
         entidadConfig.endpoint,
         extraccion.accion,
-        { ...extraccion.data, ...idsResueltos },
+        payload,
         extraccion.id_directo,
         token,
       );
     } catch (err) {
       return this.formatearErrorBackend(err as AxiosError);
     }
+
     const esListaLarga = Array.isArray(resultado) && resultado.length > 5;
     const resumenParaLlm = esListaLarga
       ? { total: resultado.length, muestra: resultado.slice(0, 3) }
@@ -187,7 +220,38 @@ export class IaAgenteService {
       { role: 'user', content: `Pregunta: ${mensaje}\nResultado: ${JSON.stringify(resumenParaLlm)}` },
     ]);
 
+    if (Array.isArray(resultado) && resultado.length > 0) {
+      const idField = entidadConfig.idField;
+      const ids = resultado.map((r: any) => r[idField]).filter((v: any) => v !== undefined);
+      if (ids.length > 0) this.ultimoResultado.set(userId, { entidad: extraccion.entidad, ids });
+    }
+
     return { mensaje: respuestaFinal, data: resultado };
+  }
+
+  private construirPayload(data: any, idsResueltos: Record<string, any>, campo?: string | null, campoFecha?: string | null): any {
+    const payload: any = {};
+    const filtros: any = {};
+
+    for (const tipo of this.TIPOS_FILTRO) {
+      if (data?.[tipo] !== undefined && data?.[tipo] !== null) {
+        filtros[tipo] = data[tipo];
+      }
+    }
+
+    if (data?.relaciones) {
+      filtros.relaciones = data.relaciones;
+    }
+
+    if (Object.keys(idsResueltos).length > 0) {
+      filtros.relaciones = { ...filtros.relaciones, ...idsResueltos };
+    }
+
+    payload.filtros = filtros;
+    payload.campo = campo || null;
+    payload.campo_fecha = campoFecha || null;
+
+    return payload;
   }
 
   private normalizarTexto(s: string): string {
@@ -249,7 +313,6 @@ export class IaAgenteService {
       return { mensaje: `No tienes permiso para acceder a "${encontrado.config.descripcion}".` };
     }
 
-    // Guardar la vista con su descripcion
     this.ultimaVista.set(userId, encontrado.clave);
 
     return {
@@ -258,64 +321,79 @@ export class IaAgenteService {
     };
   }
 
-  private async resolverReferencia(campo: string, textoLibre: string, token: string) {
-    const mapaBusqueda: Record<string, { endpoint: string; campoId: string; formato: (i: any) => string }> = {
-      conductor: {
-        endpoint: 'conductores',
-        campoId: 'id_conductor',
-        formato: (c) => `${c.nombres} ${c.apellidoPaterno} (CI: ${c.ci ?? 's/d'})`,
-      },
-      cliente: {
-        endpoint: 'clientes',
-        campoId: 'id_cliente',
-        formato: (c) => c.nombre_organizacion ?? `${c.nombres} ${c.apellidoPaterno}`,
-      },
-    };
+  private readonly CAMPO_A_ENTIDAD: Record<string, string> = {
+    conductor: 'conductores',
+    cliente: 'clientes',
+    vehiculo: 'vehiculos',
+    taller: 'talleres',
+    componente: 'componentes_vehiculo_insumos',
+  };
 
-    const conf = mapaBusqueda[campo];
-    if (!conf) {
+  private formatearItemGenerico(item: any): string {
+    if (item.nombre_organizacion) return item.nombre_organizacion;
+    if (item.nombres) return `${item.nombres} ${item.apellidoPaterno ?? ''}`.trim();
+    return item.nombre ?? item.placa ?? item.codigo ?? `ID ${item.id ?? '?'}`;
+  }
+
+  private async resolverReferencia(campo: string, textoLibre: string, token: string) {
+    const entidadKey = this.CAMPO_A_ENTIDAD[campo] ?? `${campo}s`;
+    const entidadConfig = CATALOGO_ENTIDADES[entidadKey];
+
+    if (!entidadConfig) {
       return { resuelto: false, mensajeUsuario: `No se como resolver la referencia "${campo}".` };
     }
 
-    const url = `${this.config.get('BACKEND_REAL_URL')}/${conf.endpoint}`;
+    const url = `${this.config.get('BACKEND_REAL_URL')}/${entidadConfig.endpoint}`;
     try {
       const response = await firstValueFrom(this.http.get(url, { headers: { Authorization: token } }));
-      const matches = response.data ?? [];
-      const encontrados = matches.filter((item: any) => {
-        const nombreCompleto = `${item.nombres} ${item.apellidoPaterno}`.toLowerCase();
-        return nombreCompleto.includes(textoLibre.toLowerCase());
-      });
+      const raw = response.data;
+      const matches = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const texto = this.normalizarTexto(textoLibre);
+
+      const encontrados = matches.filter((item: any) =>
+        Object.values(item).some(
+          (v: any) => typeof v === 'string' && this.normalizarTexto(v).includes(texto),
+        ),
+      );
 
       if (encontrados.length === 0) {
         return { resuelto: false, mensajeUsuario: `No encontre ningun/a "${textoLibre}".` };
       }
       if (encontrados.length > 1) {
-        return { resuelto: false, mensajeUsuario: `Encontre varios: ${encontrados.map(conf.formato).join(', ')}. ¿Cual es?` };
+        const nombres = encontrados.slice(0, 5).map(i => this.formatearItemGenerico(i));
+        return { resuelto: false, mensajeUsuario: `Encontre varios: ${nombres.join(', ')}. ¿Cual es?` };
       }
-      return { resuelto: true, valores: { [conf.campoId]: encontrados[0][conf.campoId] } };
+      return { resuelto: true, valores: { [entidadConfig.idField]: encontrados[0][entidadConfig.idField] } };
     } catch (err) {
       this.logger.error(`Error resolviendo referencia "${campo}"`, err);
       return { resuelto: false, mensajeUsuario: `Tuve un problema buscando "${textoLibre}", intenta de nuevo.` };
     }
   }
+
   private async ejecutarAccion(
     endpoint: string,
-    accion: 'get' | 'create' | 'update' | 'count' | 'sum' | 'avg',
+    accion: string,
     payload: Record<string, any>,
     idDirecto: number | undefined,
     token: string,
   ) {
+    if (!this.ACCIONES_PERMITIDAS.includes(accion)) {
+      throw new Error(`Accion no soportada: ${accion}`);
+    }
+
     const base = this.config.get('BACKEND_REAL_URL');
     const headers = { Authorization: token };
 
     if (accion === 'get' || accion === 'count' || accion === 'sum' || accion === 'avg') {
+      const body = {
+        tabla: endpoint,
+        operacion: accion,
+        filtros: payload.filtros || {},
+        campo: payload.campo || null,
+        campo_fecha: payload.campo_fecha || null,
+      };
       const response = await firstValueFrom(
-        this.http.post(`${base}/consulta-generica`, {
-          tabla: endpoint,
-          operacion: accion,
-          filtros: payload.filtros || {},
-          campo: payload.campo || null,
-        }, { headers })
+        this.http.post(`${base}/consulta-generica`, body, { headers })
       );
       return response.data;
     }
@@ -331,14 +409,19 @@ export class IaAgenteService {
       return response.data;
     }
 
+    if (accion === 'delete') {
+      if (!idDirecto) throw new Error('Falta el ID para eliminar');
+      const response = await firstValueFrom(this.http.delete(`${base}/${endpoint}/${idDirecto}`, { headers }));
+      return response.data;
+    }
+
     throw new Error(`Accion no soportada: ${accion}`);
   }
 
   private formatearErrorBackend(err: AxiosError) {
     const status = err.response?.status;
     const data: any = err.response?.data;
-    this.logger.error(`Backend respondio ${status}`, JSON.stringify(data));
-
+    this.logger.error(`Backend respondio ${status} - code: ${err.code} - msg: ${err.message}`, JSON.stringify(data ?? {}));
     if (status === 400) {
       return { mensaje: `Los datos no son validos: ${data?.message ?? 'revisa la informacion enviada'}.` };
     }
@@ -358,24 +441,67 @@ export class IaAgenteService {
     }
   }
 
-  private async llamarLlmJson(messages: any[]): Promise<ExtraccionLlm> {
-    const texto = await this.llamarLlmTexto(messages, 0.1);
+  private async llamarLlmTool(messages: any[], tools: any[], temperature = 0.1): Promise<any> {
     try {
-      return JSON.parse(texto.replace(/```json|```/g, '').trim());
-    } catch {
-      this.logger.warn('LLM no devolvio JSON valido: ' + texto);
-      return {
-        status: 'no_reconocido',
-        tipo: 'fuera_dominio',
-        entidad: '',
-        accion: 'get',
-        data: {},
-        respuesta_directa: 'No pude procesar tu solicitud, intenta reformularla.',
-      };
+      const response = await firstValueFrom(
+        this.http.post(
+          this.config.get('GROQ_URL')!,
+          {
+            model: this.config.get('GROQ_MODEL'),
+            messages,
+            temperature,
+            tools,
+            tool_choice: 'required',
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.config.get('GROQ_API_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      const toolCall = response.data.choices[0].message.tool_calls?.[0];
+      if (!toolCall) {
+        throw new Error('El modelo no devolvio tool_call');
+      }
+
+      const args = JSON.parse(toolCall.function.arguments);
+      return args;
+
+    } catch (err: any) {
+      const errorData = err.response?.data?.error;
+      const esRateLimit = errorData?.code === 'rate_limit_exceeded' || /rate limit/i.test(errorData?.message ?? '');
+      if (esRateLimit) {
+        throw new Error('Se acabo el limite de consultas de hoy. Se reiniciara mañana, gracias por tu paciencia.');
+      }
+      const mensaje = errorData?.failed_generation
+        ? `La consulta esta mal formulada: ${errorData.failed_generation}`
+        : errorData?.message || 'No pude interpretar tu consulta, intenta reformularla.';
+
+      throw new Error(mensaje);
     }
   }
 
-  private async llamarLlmTexto(messages: any[], temperature = 0.4): Promise<string> {
+  private async llamarLlmJson(messages: any[]): Promise<ExtraccionLlm> {
+    const args = await this.llamarLlmTool(messages, [CONSULTAR_DATOS_TOOL]);
+    return {
+      status: 'ok',
+      tipo: 'accion_entidad',
+      entidad: args.entidad,
+      accion: args.accion,
+      data: args.filtros || args.data || {},
+      campo: args.campo || null,
+      referencias_texto: args.referencias_texto,
+      id_directo: args.id_directo,
+      faltantes: args.faltantes,
+      mensaje_usuario: args.mensaje_usuario,
+      respuesta_directa: args.respuesta_directa
+    } as ExtraccionLlm;
+  }
+
+  private async llamarLlmTexto(messages: any[], temperature = 0.4, tools?: any[]): Promise<string> {
     const response = await firstValueFrom(
       this.http.post(
         this.config.get('GROQ_URL')!,
@@ -383,6 +509,7 @@ export class IaAgenteService {
           model: this.config.get('GROQ_MODEL'),
           messages,
           temperature,
+          ...(tools ? { tools, tool_choice: 'required' } : {}),
         },
         {
           headers: {

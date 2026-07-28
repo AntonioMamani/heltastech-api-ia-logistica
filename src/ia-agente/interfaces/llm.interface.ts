@@ -2,8 +2,9 @@ export interface ExtraccionLlm {
   status: 'ok' | 'incompleto' | 'no_reconocido';
   tipo: 'accion_entidad' | 'conversacion' | 'fuera_dominio';
   entidad: string;
-  accion: 'get' | 'create' | 'update' | 'count' | 'sum' | 'avg';
+  accion: string;
   data: Record<string, any>;
+  campo?: string | null; // <--- AGREGAR
   referencias_texto?: Record<string, string>;
   id_directo?: number;
   faltantes?: string[];
