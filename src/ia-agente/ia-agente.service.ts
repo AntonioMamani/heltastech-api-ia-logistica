@@ -13,8 +13,6 @@ import { EXTRACTOR_SYSTEM_PROMPT, ROUTER_SYSTEM_PROMPT } from './prompts/prompts
 @Injectable()
 export class IaAgenteService {
   private readonly logger = new Logger(IaAgenteService.name);
-  private ultimaVista: Map<string, string> = new Map();
-  private ultimoResultado: Map<string, { entidad: string; ids: number[] }> = new Map();
   private readonly NORMALIZACION_ENTIDADES: Record<string, string> = {
     'gastos_operativos': 'detalle_gasto_viaje',
     'gastos': 'detalle_gasto_viaje',
@@ -55,22 +53,22 @@ export class IaAgenteService {
   ) { }
 
   async procesarMensaje(mensaje: string, token: string, ctxRol: string, userId: string) {
-    this.contexto.agregarHistorial(userId, 'user', mensaje);
+    await this.contexto.agregarHistorial(userId, 'user', mensaje);
     const resultado = await this.procesarMensajeInterno(mensaje, token, ctxRol, userId);
-    this.contexto.agregarHistorial(userId, 'assistant', resultado.mensaje ?? '');
+    await this.contexto.agregarHistorial(userId, 'assistant', resultado.mensaje ?? '');
     return resultado;
   }
 
   private async procesarMensajeInterno(mensaje: string, token: string, ctxRol: string, userId: string) {
     if (/\b(crea|creame|creá|actualiz|modific|edita|editar|registra|registrar)\b/i.test(mensaje)) {
-      return { mensaje: 'Aun no puedo crear ni actualizar informacion registrada, gracias.' };
+      return { mensaje: 'Aun no puedo crear ni actualizar informacion registrada.' };
     }
 
-    const pendiente = this.contexto.get(userId);
-    const historial = this.contexto.getHistorial(userId);
+    const pendiente = await this.contexto.get(userId);
+    const historial = await this.contexto.getHistorial(userId);
 
     if (!pendiente) {
-      const vistaKey = this.ultimaVista.get(userId);
+      const vistaKey = await this.contexto.getUltimaVista(userId);
       const vistaDesc = vistaKey ? CATALOGO_RUTAS[vistaKey]?.descripcion : null;
       const vistaContexto = vistaDesc ? `El usuario esta actualmente en la vista: "${vistaDesc}".` : '';
 
@@ -81,7 +79,7 @@ export class IaAgenteService {
       const ruta = await this.llamarLlmRuta(messages);
 
       if (ruta.tipo === 'navegacion') {
-        return this.resolverNavegacion(ruta.destino ?? '', ctxRol, userId);
+        return await this.resolverNavegacion(ruta.destino ?? '', ctxRol, userId);
       }
 
       if (ruta.tipo !== 'accion_entidad') {
@@ -107,10 +105,10 @@ export class IaAgenteService {
           },
         ]);
       } else {
-        const vistaKey = this.ultimaVista.get(userId);
+        const vistaKey = await this.contexto.getUltimaVista(userId);
         const vistaDesc = vistaKey ? CATALOGO_RUTAS[vistaKey]?.descripcion : null;
         const vistaContexto = vistaDesc ? `El usuario esta actualmente en la vista: "${vistaDesc}".` : '';
-        const ultimo = this.ultimoResultado.get(userId);
+        const ultimo = await this.contexto.getUltimoResultado(userId);
         const ultimoContexto = ultimo ? `El ultimo resultado mostrado fue de "${ultimo.entidad}" con ID(s): ${ultimo.ids.join(', ')}. Si el usuario dice "ese", "esta", "el anterior", usa id_directo con ese ID.` : '';
 
         const messagesExtractor = [{ role: 'system', content: EXTRACTOR_SYSTEM_PROMPT }];
@@ -128,17 +126,17 @@ export class IaAgenteService {
     console.log('Extraccion LLM:', extraccion);
 
     if (extraccion.status === 'no_reconocido') {
-      this.contexto.clear(userId);
+      await this.contexto.clear(userId);
       return { mensaje: 'No entendi la solicitud, ¿podes reformularla?' };
     }
 
     if (extraccion.accion === 'create' || extraccion.accion === 'update' || extraccion.accion === 'delete') {
-      this.contexto.clear(userId);
+      await this.contexto.clear(userId);
       return { mensaje: 'Aun no puedo crear, actualizar ni eliminar informacion registrada, gracias.' };
     }
 
     if (extraccion.status === 'incompleto') {
-      this.contexto.set(userId, {
+      await this.contexto.set(userId, {
         entidad: extraccion.entidad,
         accion: extraccion.accion as 'create' | 'update',
         dataAcumulada: extraccion.data,
@@ -147,7 +145,7 @@ export class IaAgenteService {
       return { mensaje: extraccion.mensaje_usuario ?? 'Faltan datos, ¿me das mas detalle?' };
     }
 
-    this.contexto.clear(userId);
+    await this.contexto.clear(userId);
 
     if (this.NORMALIZACION_ENTIDADES[extraccion.entidad]) {
       extraccion.entidad = this.NORMALIZACION_ENTIDADES[extraccion.entidad];
@@ -223,7 +221,7 @@ export class IaAgenteService {
     if (Array.isArray(resultado) && resultado.length > 0) {
       const idField = entidadConfig.idField;
       const ids = resultado.map((r: any) => r[idField]).filter((v: any) => v !== undefined);
-      if (ids.length > 0) this.ultimoResultado.set(userId, { entidad: extraccion.entidad, ids });
+      if (ids.length > 0) await this.contexto.setUltimoResultado(userId, extraccion.entidad, ids);
     }
 
     return { mensaje: respuestaFinal, data: resultado };
@@ -303,7 +301,7 @@ export class IaAgenteService {
     return mejorMatch ? { clave: mejorMatch.clave, config: mejorMatch.config } : null;
   }
 
-  private resolverNavegacion(destino: string, ctxRol: string, userId: string) {
+  private async resolverNavegacion(destino: string, ctxRol: string, userId: string) {
     const rolLower = ctxRol.toLowerCase();
     const encontrado = this.resolverRutaPorTexto(destino, rolLower);
     if (!encontrado) {
@@ -313,7 +311,7 @@ export class IaAgenteService {
       return { mensaje: `No tienes permiso para acceder a "${encontrado.config.descripcion}".` };
     }
 
-    this.ultimaVista.set(userId, encontrado.clave);
+    await this.contexto.setUltimaVista(userId, encontrado.clave);
 
     return {
       mensaje: `Te lleve a ${encontrado.config.descripcion}.`,

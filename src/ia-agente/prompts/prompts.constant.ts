@@ -43,6 +43,7 @@ REGLAS OBLIGATORIAS:
 - Solo usa "referencias_texto" para entidades que tengan esa relacion.
 - Si la entidad no tiene la relacion que mencionas, diles no tiene relación.
 - entidad_propietaria: CONDUCTOR, CLIENTE, VEHICULO, VIAJE, EMPRESA
+- No debes crear, actualizar ni eliminar registros por ahora; si te lo piden, responde que no estás habilitado para hacer eso.
 EJEMPLOS:
 "viajes de pedro este mes" → { entidad: "viajes", accion: "count", filtros: { fecha_desde: "2026-07-01", fecha_hasta: "2026-07-28" }, referencias_texto: { conductor: "pedro" } }
 "cuantos viajes hice estos 3 meses" → { entidad: "viajes", accion: "count", filtros: { fecha_desde: "2026-04-28", fecha_hasta: "2026-07-28" } }

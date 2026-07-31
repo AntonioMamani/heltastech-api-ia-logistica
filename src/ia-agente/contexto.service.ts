@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from './redis.provider';
 
 interface ContextoPendiente {
   entidad: string;
   accion: 'create' | 'update';
   dataAcumulada: Record<string, any>;
   faltantes: string[];
-  expiresAt: number;
 }
 
 interface MensajeHistorial {
@@ -15,49 +16,58 @@ interface MensajeHistorial {
 
 @Injectable()
 export class ContextoService {
-  private contextos = new Map<string, ContextoPendiente>();
-  private historiales = new Map<string, MensajeHistorial[]>();
   private readonly MAX_HISTORIAL = 5;
+  private readonly TTL_CONTEXTO = 5 * 60; // segundos
 
-  get(userId: string): Omit<ContextoPendiente, 'expiresAt'> | null {
-    const ctx = this.contextos.get(userId);
-    if (!ctx) return null;
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) { }
 
-    if (ctx.expiresAt < Date.now()) {
-      this.contextos.delete(userId);
-      return null;
-    }
-
-    const { expiresAt, ...resto } = ctx;
-    return resto;
+  async get(userId: string): Promise<Omit<ContextoPendiente, 'expiresAt'> | null> {
+    const raw = await this.redis.get(`ctx:${userId}`);
+    return raw ? JSON.parse(raw) : null;
   }
 
-  set(userId: string, data: Omit<ContextoPendiente, 'expiresAt'>): void {
-    this.contextos.set(userId, {
-      ...data,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutos
-    });
+  async set(userId: string, data: Omit<ContextoPendiente, 'expiresAt'>): Promise<void> {
+    await this.redis.set(`ctx:${userId}`, JSON.stringify(data), 'EX', this.TTL_CONTEXTO);
   }
 
-  clear(userId: string): void {
-    this.contextos.delete(userId);
+  async clear(userId: string): Promise<void> {
+    await this.redis.del(`ctx:${userId}`);
   }
 
   // ---------- Historial de conversación ----------
-  getHistorial(userId: string): MensajeHistorial[] {
-    return this.historiales.get(userId) ?? [];
+  async getHistorial(userId: string): Promise<MensajeHistorial[]> {
+    const raw = await this.redis.get(`hist:${userId}`);
+    return raw ? JSON.parse(raw) : [];
   }
 
-  agregarHistorial(userId: string, role: 'user' | 'assistant', content: string): void {
-    const historial = this.historiales.get(userId) ?? [];
+  async agregarHistorial(userId: string, role: 'user' | 'assistant', content: string): Promise<void> {
+    const historial = await this.getHistorial(userId);
     historial.push({ role, content });
     while (historial.length > this.MAX_HISTORIAL * 2) {
-      historial.shift(); // guarda 5 turnos (user+assistant = 10 mensajes)
+      historial.shift();
     }
-    this.historiales.set(userId, historial);
+    await this.redis.set(`hist:${userId}`, JSON.stringify(historial), 'EX', this.TTL_CONTEXTO);
   }
 
-  limpiarHistorial(userId: string): void {
-    this.historiales.delete(userId);
+  async limpiarHistorial(userId: string): Promise<void> {
+    await this.redis.del(`hist:${userId}`);
+  }
+
+  // ---------- Vista y último resultado ----------
+  async getUltimaVista(userId: string): Promise<string | null> {
+    return await this.redis.get(`vista:${userId}`);
+  }
+
+  async setUltimaVista(userId: string, vista: string): Promise<void> {
+    await this.redis.set(`vista:${userId}`, vista, 'EX', this.TTL_CONTEXTO);
+  }
+
+  async getUltimoResultado(userId: string): Promise<{ entidad: string; ids: number[] } | null> {
+    const raw = await this.redis.get(`ultres:${userId}`);
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  async setUltimoResultado(userId: string, entidad: string, ids: number[]): Promise<void> {
+    await this.redis.set(`ultres:${userId}`, JSON.stringify({ entidad, ids }), 'EX', this.TTL_CONTEXTO);
   }
 }
